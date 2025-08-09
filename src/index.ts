@@ -6,18 +6,8 @@ import path from 'path'
 
 export const name = 'ysyunhei'
 
-//填入api key
-export interface Config {
-  api_key:string
-  admin_qqs: string[]
-  // 可选：用于在配置界面展示使用说明（markdown）
-  usage?: string
-}
-
-export const Config: Schema<Config> = Schema.object({
-  api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
-  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。').default([]),
-  usage: Schema.string().role('markdown').description('使用说明').default(`
+// 控制台展示用使用说明（遵循官方插件的写法）
+export const usage = `
 ## 指令列表
 ### 在云黑中添加账号
 \`yunhei.add <qqnum> <level> <desc> [bantime]\`
@@ -31,7 +21,17 @@ export const Config: Schema<Config> = Schema.object({
 \`yunhei.chk [qqnum]\`
 
 当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有普通用户。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
-`)
+`
+
+//填入api key
+export interface Config {
+  api_key:string
+  admin_qqs: string[]
+}
+
+export const Config: Schema<Config> = Schema.object({
+  api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
+  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。').default([]),
 })
 
 //并发控制函数
