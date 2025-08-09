@@ -20,7 +20,7 @@ export const usage = `
 ### 在云黑中查询账号
 \`yunhei.chk [qqnum]\`
 
-当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有普通用户。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
+当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有成员（包括管理员与群主）。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
 `
 
 //填入api key
@@ -214,11 +214,10 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
   return `错误：获取群成员列表失败。原因：${sanitizeErrorMessage(error, config)}`
     }
 
-    const totalMembers = group_members.length
-    const membersToCheck = group_members.filter(member => member.role === 'member');
-    const totalToCheck = membersToCheck.length
-    // 开始时输出群员数量及将要检查的人数
-    meta.send(`正在检查群内所有人员（共${totalMembers}人，将检查普通成员${totalToCheck}人）……`)
+  const membersToCheck = group_members
+  const totalToCheck = membersToCheck.length
+  // 开始时输出群员数量及将要检查的人数（包含管理员与群主）
+  meta.send(`正在检查群内所有人员（共${totalToCheck}人）……`)
 
     let detectnum:number=0,light:number=0,moderate:number=0,severe:number=0,severe_users:string[]=[], api_errors: string[] = []
     // 进度统计与阈值（25%、50%、75%）
