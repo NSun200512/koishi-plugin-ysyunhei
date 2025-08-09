@@ -31,7 +31,7 @@ export interface Config {
 }
 
 export const Config: Schema<Config> = Schema.object({
-  api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
+  api_key:Schema.string().role('secret').description('你在云黑系统中的API Key。').required(),
   admin_qqs: Schema.dict(Schema.string()).description('管理员 QQ 到“登记人昵称”的映射。只有键中包含的 QQ 能使用全部功能；登记时会用其对应的昵称作为登记人上报云黑。').default({}),
 })
 
@@ -74,6 +74,24 @@ function time2Seconds(timeStr: string) {
     return totalSeconds;
 }
 
+// 错误信息脱敏，避免 api_key 等敏感信息泄露
+function sanitizeErrorMessage(err: any, config?: Config): string {
+  try {
+    let msg = (err && typeof err === 'object' && 'message' in err) ? String((err as any).message) : String(err ?? '')
+    if (!msg) return '未知错误'
+    // 隐去 query 中的 api_key
+    msg = msg.replace(/api_key=[^&\s"']+/gi, 'api_key=[REDACTED]')
+    // 隐去明文出现在消息中的 api_key 本体
+    if (config?.api_key) {
+      const key = config.api_key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      msg = msg.replace(new RegExp(key, 'g'), '[REDACTED]')
+    }
+    return msg
+  } catch {
+    return '未知错误'
+  }
+}
+
 //描述添加日期，在多个描述存在时方便整理发生时间
 function dayRecord(desc:string): string {
   const now = new Date(); // 获取当前日期对象
@@ -100,7 +118,7 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
       return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
     }
   } catch (error) {
-    return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${error.message}`
+  return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${sanitizeErrorMessage(error, config)}`
   }
 
   //检查使用者是否为管理
@@ -140,7 +158,7 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
         await meta.onebot.setGroupKick(meta.guildId, qqnum, false)
         measure = '踢出群并永久' + measure
       } catch (error) {
-        return `踢出用户失败，可能是权限不足或对方是群主/管理员。错误信息：${error.message}`
+  return `踢出用户失败，可能是权限不足或对方是群主/管理员。错误信息：${sanitizeErrorMessage(error, config)}`
       }
     }
     //禁言处理
@@ -149,7 +167,7 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
         await meta.onebot.setGroupBan(meta.guildId, qqnum, time2Seconds(bantime))
         measure += `并禁言${bantime}`
       } catch (error) {
-        return `禁言用户失败，可能是权限不足或对方是群主/管理员。错误信息：${error.message}`
+  return `禁言用户失败，可能是权限不足或对方是群主/管理员。错误信息：${sanitizeErrorMessage(error, config)}`
       }
     }
     //显示处理结果部分
@@ -162,7 +180,7 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
     return `已将${nickname}（${qqnum}）${measure}。\n违规原因：${data.describe}\n严重程度：${data.level}\n措施：${measure}\n登记人：${data.registration}\n上黑时间：${data.add_time}`
 
   } catch (error) {
-    return `错误：执行添加操作时遇到意外。原因：${error.message}`
+    return `错误：执行添加操作时遇到意外。原因：${sanitizeErrorMessage(error, config)}`
   }
 }
 
@@ -180,7 +198,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
       return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
     }
   } catch (error) {
-    return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${error.message}`
+  return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${sanitizeErrorMessage(error, config)}`
   }
 
   //检查使用者是否为管理
@@ -194,7 +212,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
     try {
       group_members = await meta.onebot.getGroupMemberList(meta.guildId)
     } catch (error) {
-      return `错误：获取群成员列表失败。原因：${error.message}`
+  return `错误：获取群成员列表失败。原因：${sanitizeErrorMessage(error, config)}`
     }
 
     let detectnum:number=0,light:number=0,moderate:number=0,severe:number=0,severe_users:string[]=[], api_errors: string[] = []
@@ -208,7 +226,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
         if (res.code !== 1 && res.data?.length === 0) {
           // 记录API错误，但不中断整个流程
           if (!api_errors.length) { // 只记录第一条，避免刷屏
-            api_errors.push(res.msg || '未知API错误');
+            api_errors.push(sanitizeErrorMessage(res.msg || '未知API错误', config));
           }
           return;
         }
@@ -226,13 +244,13 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
             try {
               await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
             } catch (error) {
-              severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${error.message}`);
+              severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${sanitizeErrorMessage(error, config)}`);
             }
           }
         }
       } catch (error) {
         if (!api_errors.length) { // 只记录第一条网络错误
-          api_errors.push(error.message);
+          api_errors.push(sanitizeErrorMessage(error, config));
         }
       }
     }, 20)
@@ -265,7 +283,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
         let res:string=`账号类型：${data.platform}\n用户名：${nickname}\nQQ号：${data.account_name}\n违规原因：${data.describe}\n严重等级：${data.level}\n登记人：${data.registration}\n上黑时间：${data.add_time}\n过期时间：${data.expiration}\n查询云黑请见：https://yunhei.youshou.wiki`
         return res
       }
-    } catch (error) {return `错误：查询用户失败，请检查网络连接或API状态。原因：${error.message}`}
+  } catch (error) {return `错误：查询用户失败，请检查网络连接或API状态。原因：${sanitizeErrorMessage(error, config)}`}
   }
 }
 
