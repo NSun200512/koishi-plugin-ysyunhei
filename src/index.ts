@@ -26,12 +26,13 @@ export const usage = `
 //填入api key
 export interface Config {
   api_key:string
-  admin_qqs: string[]
+  // 管理员 QQ 到登记人昵称的映射
+  admin_qqs: Record<string, string>
 }
 
 export const Config: Schema<Config> = Schema.object({
   api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
-  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。').default([]),
+  admin_qqs: Schema.dict(Schema.string()).description('管理员 QQ 到“登记人昵称”的映射。只有键中包含的 QQ 能使用全部功能；登记时会用其对应的昵称作为登记人上报云黑。').default({}),
 })
 
 //并发控制函数
@@ -103,7 +104,7 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
   }
 
   //检查使用者是否为管理
-  if (!config.admin_qqs.includes(meta.userId)) {
+  if (!config.admin_qqs || !(meta.userId in config.admin_qqs)) {
     return '错误：您没有使用该命令的权限。'
   }
   //检查等级参数
@@ -121,9 +122,9 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
       return `错误：无法与云黑系统通信。API返回：${apiCheck.msg || '未知错误'}`;
     }
 
-  // 仅管理员可调用此命令，这里直接使用调用者作为登记人
-  const registration = meta.userId
-    let post=await ctx.http.post(`https://yunhei.youshou.wiki/add_platform_users?api_key=${config.api_key}&account_type=1&name=${qqnum}&level=${level}&registration=${registration}&expiration=${expiration}&desc=${dayRecord(desc)}`)
+  // 仅管理员可调用此命令，这里使用配置中映射的“登记人昵称”
+  const registration = config.admin_qqs[meta.userId]
+    let post=await ctx.http.post(`https://yunhei.youshou.wiki/add_platform_users?api_key=${config.api_key}&account_type=1&name=${qqnum}&level=${level}&registration=${encodeURIComponent(registration)}&expiration=${expiration}&desc=${encodeURIComponent(dayRecord(desc))}`)
     if (post.code !== 1) {
       return `错误：添加用户失败。API返回：${post.msg || '未知错误'}`
     }
@@ -183,7 +184,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
   }
 
   //检查使用者是否为管理
-  if (!config.admin_qqs.includes(meta.userId)) {
+  if (!config.admin_qqs || !(meta.userId in config.admin_qqs)) {
     return '错误：您没有使用该命令的权限。'
   }
   //查询所有用户信息
