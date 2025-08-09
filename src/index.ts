@@ -5,37 +5,53 @@ import path from 'path'
 
 
 export const name = 'ysyunhei'
-export const ADMIN_DIR = 'external/ysyunhei/admin'
-//填入api key
 
+//填入api key
 export interface Config {
   api_key:string
+  admin_qqs: string[]
 }
 
 export const Config: Schema<Config> = Schema.object({
-    api_key:Schema.string()
+  api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
+  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。'),
+  usage: Schema.string().role('markdown').description('使用说明').content(`
+## 指令列表
+### 在云黑中添加账号
+\`yunhei.add <qqnum> <level> <desc> [bantime]\`
+
+将指定的账号添加到云黑中。
+* \`qqnum\`:需要添加的QQ号
+* \`level\`:违规严重程度，取值1/2/3，分别对应轻微、中等、严重。在达到“严重”等级后，云黑会自动将该账号从所在的群里踢出，并自动拒绝该账号加入群聊。
+* \`desc\`:违规描述，用于记录违规行为。
+* \`bantime\`:禁言时长（可选）。当该项有值，机器人会给该账号设置所在的群里指定的禁言时长。
+### 在云黑中查询账号
+\`yunhei.chk [qqnum]\`
+
+当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有普通用户。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
+`)
 })
 
 //并发控制函数
 async function processInBatches<T>(
-  items: T[], 
-  processor: (item: T) => Promise<any>, 
+  items: T[],
+  processor: (item: T) => Promise<any>,
   batchSize: number = 10
 ): Promise<any[]> {
   const results: any[] = [];
-  
+
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch.map(processor));
     results.push(...batchResults);
   }
-  
+
   return results;
 }
 //时间转换为秒，禁言用
 function time2Seconds(timeStr: string) {
     if (!timeStr) return 0;
-    
+
     const regex = /(\d+)\s*(天|小时|时|分钟|分)/g;
     let totalSeconds = 0;
     let match;
@@ -43,7 +59,7 @@ function time2Seconds(timeStr: string) {
     while ((match = regex.exec(timeStr)) !== null) {
         const num = parseInt(match[1], 10);
         const unit = match[2];
-        
+
         if (unit === '天') {
             totalSeconds += num * 86400;  // 1天 = 86400秒
         } else if (unit === '小时' || unit === '时') {
@@ -64,50 +80,28 @@ function dayRecord(desc:string): string {
   return `${desc}（${year}-${month}-${day}）`; // 返回 YYYY-MM-DD
 }
 
-//获取管理员列表
-async function loadAdmins(groupId: string) {
-  // 确保admin目录存在
-  await fs.mkdir(ADMIN_DIR, { recursive: true })
-  const filePath = path.join(ADMIN_DIR, `${groupId}.json`)
-  try {
-    // 检查文件是否存在
-    await fs.access(filePath)
-    // 读取文件内容
-    const data = await fs.readFile(filePath, 'utf-8')
-    return data;
-  } catch (error) {
-    // 如果文件不存在或读取失败，创建一个空的配置文件
-    await fs.writeFile(filePath, '{}', 'utf-8')
-    return {};
-  }
-}
-//删除管理员
-async function delAdmin(admins: object, qqnum: string, groupnum: string) {
-  let qqname:string=admins[qqnum]
-  delete admins[qqnum]
-  //保存管理员名单
-  const filePath = path.join(ADMIN_DIR, `${groupnum}.json`)
-  await fs.writeFile(filePath, JSON.stringify(admins, null, 2), 'utf-8')
-  return `已将用户${qqname}（${qqnum}）移出群管理员。\n请注意：不同的群组有自己的管理员名单，需要在相应群组单独设置。`
-}
-
-
 //添加黑名单用户
 export async function add(ctx: Context, meta: Session, qqnum: string, level: number, desc: string, bantime: string,config: Config) {
+  // 检查参数
+  if (!qqnum || !level || !desc) {
+    return '错误：缺少必要的参数。请使用 `help yunhei.add` 查看正确的指令格式。';
+  }
   //检查是否为群聊环境
   if (meta.guildId === undefined) {
     return '错误：请在群组内使用命令。'
   }
   //检查机器人权限
-  let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
-  if (bot.role == 'member') {
-    return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
+  try {
+    let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
+    if (bot.role == 'member') {
+      return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
+    }
+  } catch (error) {
+    return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${error.message}`
   }
+
   //检查使用者是否为管理
-  let user: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.userId)
-  let admins=await loadAdmins(meta.guildId)
-  admins = JSON.parse(admins as string)
-  if (!(user.user_id in admins)) {
+  if (!config.admin_qqs.includes(meta.userId)) {
     return '错误：您没有使用该命令的权限。'
   }
   //检查等级参数
@@ -118,47 +112,55 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
   let expiration: number = level == 1 ? 31536000 : 0
   //获取黑名单用户信息
   try {
-    let blacklist_person=await ctx.http.get(`https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${qqnum}`)
-    if (blacklist_person.code==0){
-      return '错误：API Key 无效或未启用，请检查配置。'
+    const apiCheck = await ctx.http.get(`https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${qqnum}`)
+    if (apiCheck.code !== 1 && apiCheck.data?.length > 0) {
+      // 用户已存在于黑名单中，这在 get 接口中可能不算一个“错误”
+    } else if (apiCheck.code !== 1 && apiCheck.data?.length === 0) {
+      return `错误：无法与云黑系统通信。API返回：${apiCheck.msg || '未知错误'}`;
     }
-    let post=await ctx.http.post(`https://yunhei.youshou.wiki/add_platform_users?api_key=${config.api_key}&account_type=1&name=${qqnum}&level=${level}&registration=${admins[user.user_id]}&expiration=${expiration}&desc=${dayRecord(desc)}`)
-    if (post.code==0) {
-      return `错误：添加失败，请检查参数是否正确。若所有参数无误仍添加失败，请联系开发者。\n失败原因：API Key 无效或未启用。`
+
+    const user = await meta.bot.getLogin()
+    const registration = config.admin_qqs.includes(meta.userId) ? meta.userId : user.userId
+    let post=await ctx.http.post(`https://yunhei.youshou.wiki/add_platform_users?api_key=${config.api_key}&account_type=1&name=${qqnum}&level=${level}&registration=${registration}&expiration=${expiration}&desc=${dayRecord(desc)}`)
+    if (post.code !== 1) {
+      return `错误：添加用户失败。API返回：${post.msg || '未知错误'}`
     }
-    if (post.code==1) {
-      //显示记录违规时长并执行相关操作
-      let measure:string=`记录违规信息`
-      if (level==1) {  //1级（轻微）仅记录时长一年
-        measure += `，时长一年`
-      } else if (level==2) {  //2级（中等）记录时长永久并禁言
-        measure = '永久' + measure
-      } else if (level==3) {  //3级（严重）记录时长永久并踢群
-        try {
-          await meta.onebot.setGroupKick(meta.guildId, qqnum, false)
-          measure = '踢出群并永久' + measure
-        } catch (error) {
-          return `踢出用户失败：${error}`
-        }
+
+    //显示记录违规时长并执行相关操作
+    let measure:string=`记录违规信息`
+    if (level==1) {  //1级（轻微）仅记录时长一年
+      measure += `，时长一年`
+    } else if (level==2) {  //2级（中等）记录时长永久并禁言
+      measure = '永久' + measure
+    } else if (level==3) {  //3级（严重）记录时长永久并踢群
+      try {
+        await meta.onebot.setGroupKick(meta.guildId, qqnum, false)
+        measure = '踢出群并永久' + measure
+      } catch (error) {
+        return `踢出用户失败，可能是权限不足或对方是群主/管理员。错误信息：${error.message}`
       }
-      //禁言处理
-      if (!(bantime == undefined)){
-        try {
-          await meta.onebot.setGroupBan(meta.guildId, qqnum, time2Seconds(bantime))
-          measure += `并禁言${bantime}`
-        } catch (error) {
-          return `禁言用户失败：${error}`
-        }
-      }
-      //显示处理结果部分
-      blacklist_person=await ctx.http.get(`https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${qqnum}`)
-      let data = blacklist_person.data
-      let nickname:string = (await meta.onebot.getStrangerInfo(data.account_name)).nickname
-      return `已将${nickname}（${qqnum}）${measure}。\n违规原因：${data.describe}\n严重程度：${data.level}\n措施：${measure}\n登记人：${data.registration}\n上黑时间：${data.add_time}`
     }
+    //禁言处理
+    if (!(bantime == undefined)){
+      try {
+        await meta.onebot.setGroupBan(meta.guildId, qqnum, time2Seconds(bantime))
+        measure += `并禁言${bantime}`
+      } catch (error) {
+        return `禁言用户失败，可能是权限不足或对方是群主/管理员。错误信息：${error.message}`
+      }
+    }
+    //显示处理结果部分
+    const finalCheck = await ctx.http.get(`https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${qqnum}`)
+    if (finalCheck.code !== 1) {
+        return `成功添加用户到云黑，但获取最终信息时出错。API返回：${finalCheck.msg || '未知错误'}`;
+    }
+    let data = finalCheck.data
+    let nickname:string = (await meta.onebot.getStrangerInfo(data.account_name)).nickname
+    return `已将${nickname}（${qqnum}）${measure}。\n违规原因：${data.describe}\n严重程度：${data.level}\n措施：${measure}\n登记人：${data.registration}\n上黑时间：${data.add_time}`
+
   } catch (error) {
-    return `错误：添加用户失败。原因：${error}`
-  }  
+    return `错误：执行添加操作时遇到意外。原因：${error.message}`
+  }
 }
 
 
@@ -169,54 +171,68 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
     return '错误：请在群组内使用命令。'
   }
   //检查机器人权限
-  let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
-  if (bot.role == 'member') {
-    return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
+  try {
+    let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
+    if (bot.role == 'member') {
+      return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
+    }
+  } catch (error) {
+    return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${error.message}`
   }
+
   //检查使用者是否为管理
-  let user: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.userId)
-  let admins=await loadAdmins(meta.guildId)
-  admins = JSON.parse(admins as string)
-  if (!(user.user_id in admins)) {
+  if (!config.admin_qqs.includes(meta.userId)) {
     return '错误：您没有使用该命令的权限。'
   }
   //查询所有用户信息
   if (qqnum===undefined) {
     meta.send(`正在检查群内所有人员……`)
-    let group_members=await meta.onebot.getGroupMemberList(meta.guildId)
-    let res,detectnum:number,light:number,moderate:number,severe:number,severe_users:string[]=[]
-    detectnum=light=moderate=severe=0
-    const membersToCheck = group_members.filter(member => member.role === 'member');
-    const results = await processInBatches(membersToCheck, async (member) => {
+    let group_members
     try {
-      const res = await ctx.http.get(
-        `https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${member.user_id}`
-      )
-      if (res.code == 0) {
-        throw new Error('API Key 无效或未启用，请检查配置。')
-      }
-      //等级判定
-      if (!(res.data.length === 0)) {
-        detectnum+=1
-        if (res.data.level==`轻微`) {
-          light+=1
-        } else if (res.data.level==`中等`) {
-          moderate+=1
-        } else if (res.data.level==`严重`) {
-          severe+=1
-          //构建严重用户信息并尝试踢群
-          severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${res.describe}\n登记人：${res.registration}\n上黑时间：${res.add_time}`)
-          try {
-            await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
-          } catch (error) {
-            return `踢出用户失败：${error}`
+      group_members = await meta.onebot.getGroupMemberList(meta.guildId)
+    } catch (error) {
+      return `错误：获取群成员列表失败。原因：${error.message}`
+    }
+
+    let detectnum:number=0,light:number=0,moderate:number=0,severe:number=0,severe_users:string[]=[], api_errors: string[] = []
+    const membersToCheck = group_members.filter(member => member.role === 'member');
+
+    await processInBatches(membersToCheck, async (member: OneBot.GroupMemberInfo) => {
+      try {
+        const res = await ctx.http.get(
+          `https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${member.user_id}`
+        )
+        if (res.code !== 1 && res.data?.length === 0) {
+          // 记录API错误，但不中断整个流程
+          if (!api_errors.length) { // 只记录第一条，避免刷屏
+            api_errors.push(res.msg || '未知API错误');
+          }
+          return;
+        }
+        //等级判定
+        if (!(res.data.length === 0)) {
+          detectnum+=1
+          if (res.data.level==`轻微`) {
+            light+=1
+          } else if (res.data.level==`中等`) {
+            moderate+=1
+          } else if (res.data.level==`严重`) {
+            severe+=1
+            //构建严重用户信息并尝试踢群
+            severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${res.data.describe}\n登记人：${res.data.registration}\n上黑时间：${res.data.add_time}`)
+            try {
+              await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
+            } catch (error) {
+              severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${error.message}`);
+            }
           }
         }
-        return { member, data: res.data };
+      } catch (error) {
+        if (!api_errors.length) { // 只记录第一条网络错误
+          api_errors.push(error.message);
+        }
       }
-    } catch (error) {
-      return { member, error: error.message };
-    }}, 20)
+    }, 20)
     //生成报告
     let report:string
     if (detectnum == 0) {
@@ -224,97 +240,35 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
     } else {
         report = `检测到${detectnum}名违规用户。其中等级轻微者${light}人，等级中等者${moderate}人，等级严重者${severe}人。`
         if (!(severe_users.length === 0)){
-          report += `\n严重用户列表：\n${severe_users.join('\n')}\n列表中的用户已被踢出群聊。`
+          report += `\n严重用户列表及处理结果：\n${severe_users.join('\n')}\n列表中等级为“严重”的用户已尝试踢出群聊。`
         }
-      }
-      meta.send(`${report}\n检查完毕，感谢您的使用。`)
+    }
+    if (api_errors.length > 0) {
+      report += `\n\n在检查过程中遇到一个或多个错误，可能导致部分用户未被正确查询。遇到的第一个错误是：${api_errors[0]}`
+    }
+    meta.send(`${report}\n检查完毕，感谢您的使用。`)
   } else {
     //查询单个用户信息
     try {
       let blacklist_person=await ctx.http.get(`https://yunhei.youshou.wiki/get_platform_users?api_key=${config.api_key}&mode=1&search_type=1&account_type=1&account=${qqnum}`)
-      if (blacklist_person.code==0){
-        return '错误：API Key 无效或未启用，请检查配置。'
+      if (blacklist_person.code !== 1) {
+        return `错误：查询用户失败。API返回：${blacklist_person.msg || '未知错误'}`
       }
       if (blacklist_person.data.length === 0) {
-        return `查询失败，该用户不在黑名单中。` 
+        return `查询成功，该用户不在黑名单中。`
       } else {
         let data=blacklist_person.data
         let nickname:string = (await meta.onebot.getStrangerInfo(data.account_name)).nickname
         let res:string=`账号类型：${data.platform}\n用户名：${nickname}\nQQ号：${data.account_name}\n违规原因：${data.describe}\n严重等级：${data.level}\n登记人：${data.registration}\n上黑时间：${data.add_time}\n过期时间：${data.expiration}\n查询云黑请见：https://yunhei.youshou.wiki`
         return res
       }
- } catch (error) {return `错误：查询用户失败。原因：${error}`}
-}
+    } catch (error) {return `错误：查询用户失败，请检查网络连接或API状态。原因：${error.message}`}
+  }
 }
 
-//管理员管理
-export async function admin(options: any, meta: Session) {
-  //检查是否为群聊环境
-  if (meta.guildId === undefined) {
-    return '错误：请在群组内使用命令。'
-  }
-  //检查机器人权限
-  let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
-  if (bot.role == 'member') {
-    return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
-  }
-  //检查使用者是否为管理
-  let user: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.userId)
-  let admins=await loadAdmins(meta.guildId)
-  admins = JSON.parse(admins as string)
-  if (!(user.user_id in admins)) {
-    return '错误：您没有使用该命令的权限。'
-  }
-  //排除可能出现的使用多个命令情况
-  if ((options.add && options.del)||(options.del && options.list)||(options.add && options.list)){
-    return '错误：请勿同时使用两个及以上的参数'
-  } else if (options.add) {  //处理添加管理员操作
-    if (options.add in admins) {
-      return '错误：该用户在管理员名单中已存在。'
-    } else {
-      let qqname:string=options.name?options.name:await (await meta.onebot.getStrangerInfo(options.add)).nickname
-      admins[options.add] = qqname
-      //保存管理员名单
-      const filePath = path.join(ADMIN_DIR, `${meta.guildId}.json`)
-      await fs.writeFile(filePath, JSON.stringify(admins, null, 2), 'utf-8')
-      return `已将用户${qqname}（${options.add}）设为群云黑管理员。\n请注意：不同的群组有自己的管理员名单，需要在相应群组单独设置。`
-    }
-  } else if (options.del) {  //处理删除管理员操作
-    if (!(options.del in admins)) {
-      return '错误：该用户在管理员名单中不存在。'
-    } else {
-      //额外操作：当操作对象为自己时，确认是否删除自己
-      if (options.del == meta.userId) {
-        await meta.send('您确定删除自己吗？输入y确认，输入其他字符将取消操作。')
-        const selfdelconfirm = await meta.prompt()
-        if ((selfdelconfirm=='y')||(selfdelconfirm=='Y')) {
-          return delAdmin(admins, options.del, meta.guildId)
-        } else return '操作已取消。'
-      } else return delAdmin(admins, options.del, meta.guildId)
-    }
-  } else if (options.list) {
-    return `本群的管理员如下：\n${Object.keys(admins).map(key => `${admins[key]}（${key}）`).join('\n')}\n\n请注意：不同的群组有自己的管理员名单，需要在相应群组单独设置。`
-  }
-}
 export function apply(ctx: Context,config: Config) {
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
     .action(({ session }, qqnum, level, desc, bantime) => add(ctx, session, qqnum, level, desc, bantime, config))
   ctx.command('yunhei.chk [qqnum]')
     .action(({ session }, qqnum) => check(ctx, session, qqnum, config))
-  ctx.command('yunhei.admin').option('add', '<qqnum>').option('name','<name>').option('del','<qqnum>').option('list','--list')
-    .action(({session,options}) => admin(options, session))
-  // 加群时默认使所有管理获得bot权限
-  ctx.on('guild-added',async (session) => {
-    let group_members=await session.onebot.getGroupMemberList(session.guildId)
-    let group_admins={}
-    for (let member of group_members){
-      if ((member.role=='admin')||(member.role=='owner')){
-        group_admins[member.user_id]=member.nickname
-      }
-    }
-    await fs.mkdir(ADMIN_DIR, { recursive: true })
-    const filePath = path.join(ADMIN_DIR, `${session.guildId}.json`)
-    await fs.writeFile(filePath, JSON.stringify(group_admins, null, 2), 'utf-8')
-    session.send(`云黑机器人已加入该群，并默认使群主和所有管理获得机器人使用权限。\n本群的管理员如下：\n${Object.keys(group_admins).map(key => `${group_admins[key]}（${key}）`).join('\n')}\n机器人的禁言与踢群功能需要群管理员权限，请群主尽快为机器人授予相应权限。\n如需修改管理员名称，请咨询机器人持有者。`)
-  })
 }
