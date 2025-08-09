@@ -453,20 +453,21 @@ export function apply(ctx: Context,config: Config) {
       const muteHours = Math.max(1, ((config.sleep_mute_hours ?? 8) | 0))
       const baseMsg = `本命令将会针对执行一个${muteHours}小时的禁言，正所谓精致睡眠。`
       if (!confirm) {
-        return `当前已在精致睡眠时间段，如果确认，请输入“yunhei.sleepwell confirm”，此操作不可撤销。\n${baseMsg}`
+  return `${baseMsg}\n\n当前已在精致睡眠时间段（${start}:00-${end}:00），如果确认，请输入以下命令。注意，此操作不可撤销！\n*yunhei.sleepwell confirm*`
       }
       if (String(confirm).toLowerCase() === 'confirm') {
         try {
-          const seconds = muteHours * 60 * 60
-          await session.onebot.setGroupBan(session.guildId, session.userId, seconds)
-          let extra = ''
+          // 先判断是否为群管，若是，仅提示且不执行禁言
           try {
             const info = await session.onebot.getGroupMemberInfo(session.guildId, session.userId)
             if (info?.role && info.role !== 'member') {
-              extra = '\n你已经是一个成熟的群管了，要学会以身作则按时休息！'
+              return '你已经是一个成熟的群管了，要学会以身作则按时休息！'
             }
           } catch {}
-          return `${muteHours}小时精致睡眠已到账，晚安~${extra}`
+
+          const seconds = muteHours * 60 * 60
+          await session.onebot.setGroupBan(session.guildId, session.userId, seconds)
+          return `${muteHours}小时精致睡眠已到账，晚安~`
         } catch (e) {
           return '禁言失败，可能是机器人权限不足。'
         }
