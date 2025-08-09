@@ -23,6 +23,7 @@ export const usage = `
 
 当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有成员（包括管理员与群主）。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
 \n### 查看插件信息\n\`yunhei.about\`\n\n显示当前插件版本、贡献者列表，并检查云黑官网可用性。
+\n### 趣味：精致睡眠\n\`yunhei.sleepwell [confirm]\`\n\n- 作用：在北京时间 22:00-02:00 期间，对自己执行 8 小时禁言。\n- 使用：在时间段内，直接输入 \`yunhei.sleepwell\` 会提示确认信息，输入 \`yunhei.sleepwell confirm\` 即执行。\n- 限制：仅群聊可用；非上述时间段调用将不会有任何输出；本指令有 30 秒冷却。
 `
 
 //填入api key
@@ -30,11 +31,20 @@ export interface Config {
   api_key:string
   // 管理员 QQ 到登记人昵称的映射
   admin_qqs: Record<string, string>
+  // 精致睡眠开始小时（北京时间，0-23）
+  sleep_start_hour?: number
+  // 精致睡眠结束小时（北京时间，0-23）
+  sleep_end_hour?: number
+  // 精致睡眠禁言时长（小时）
+  sleep_mute_hours?: number
 }
 
 export const Config: Schema<Config> = Schema.object({
   api_key:Schema.string().role('secret').description('你在云黑系统中的API Key。').required(),
   admin_qqs: Schema.dict(Schema.string()).description('管理员 QQ 到“登记人昵称”的映射。只有键中包含的 QQ 能使用全部功能；登记时会用其对应的昵称作为登记人上报云黑。').default({}),
+  sleep_start_hour: Schema.number().min(0).max(23).default(22).description('精致睡眠开始时间（北京时间小时，0-23）。'),
+  sleep_end_hour: Schema.number().min(0).max(23).default(2).description('精致睡眠结束时间（北京时间小时，0-23）。'),
+  sleep_mute_hours: Schema.number().min(1).max(24).default(8).description('精致睡眠禁言时长（小时）。'),
 })
 
 //并发控制函数
@@ -418,5 +428,49 @@ export function apply(ctx: Context,config: Config) {
       const tip = checkAndSetCooldown(session, 'yunhei.about')
       if (tip) return tip
       return about(ctx)
+    })
+
+  ctx.command('yunhei.sleepwell [confirm]')
+    .action(async ({ session }, confirm) => {
+      // 仅群聊可用；若不是群聊则静默
+      if (!session.guildId) return
+      // 获取北京时间（UTC+8）
+      const now = new Date(Date.now() + 8 * 60 * 60 * 1000)
+      const hour = now.getUTCHours()
+      // 精致睡眠区间（来自配置；默认 22-02）
+      const start = Math.max(0, Math.min(23, (config.sleep_start_hour ?? 22) | 0))
+      const end = Math.max(0, Math.min(23, (config.sleep_end_hour ?? 2) | 0))
+      const inSleepTime = start === end
+        ? true
+        : (start < end ? (hour >= start && hour < end) : (hour >= start || hour < end))
+      if (!inSleepTime) {
+        // 不在时间段则完全不响应
+        return
+      }
+      // 命中时间段后再检查冷却
+      const tip = checkAndSetCooldown(session, 'yunhei.sleepwell')
+      if (tip) return tip
+      const muteHours = Math.max(1, ((config.sleep_mute_hours ?? 8) | 0))
+      const baseMsg = `本命令将会针对执行一个${muteHours}小时的禁言，正所谓精致睡眠。`
+      if (!confirm) {
+        return `当前已在精致睡眠时间段，如果确认，请输入“yunhei.sleepwell confirm”，此操作不可撤销。\n${baseMsg}`
+      }
+      if (String(confirm).toLowerCase() === 'confirm') {
+        try {
+          const seconds = muteHours * 60 * 60
+          await session.onebot.setGroupBan(session.guildId, session.userId, seconds)
+          let extra = ''
+          try {
+            const info = await session.onebot.getGroupMemberInfo(session.guildId, session.userId)
+            if (info?.role && info.role !== 'member') {
+              extra = '\n你已经是一个成熟的群管了，要学会以身作则按时休息！'
+            }
+          } catch {}
+          return `${muteHours}小时精致睡眠已到账，晚安~${extra}`
+        } catch (e) {
+          return '禁言失败，可能是机器人权限不足。'
+        }
+      }
+      return
     })
 }
