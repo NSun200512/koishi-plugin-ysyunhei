@@ -10,12 +10,14 @@ export const name = 'ysyunhei'
 export interface Config {
   api_key:string
   admin_qqs: string[]
+  // 可选：用于在配置界面展示使用说明（markdown）
+  usage?: string
 }
 
 export const Config: Schema<Config> = Schema.object({
   api_key:Schema.string().description('你在云黑系统中的API Key。').required(),
-  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。'),
-  usage: Schema.string().role('markdown').description('使用说明').content(`
+  admin_qqs: Schema.array(Schema.string()).description('插件管理员的 QQ 号列表。只有在此列表中的用户才能使用插件的全部功能。').default([]),
+  usage: Schema.string().role('markdown').description('使用说明').default(`
 ## 指令列表
 ### 在云黑中添加账号
 \`yunhei.add <qqnum> <level> <desc> [bantime]\`
@@ -119,8 +121,8 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
       return `错误：无法与云黑系统通信。API返回：${apiCheck.msg || '未知错误'}`;
     }
 
-    const user = await meta.bot.getLogin()
-    const registration = config.admin_qqs.includes(meta.userId) ? meta.userId : user.userId
+  // 仅管理员可调用此命令，这里直接使用调用者作为登记人
+  const registration = meta.userId
     let post=await ctx.http.post(`https://yunhei.youshou.wiki/add_platform_users?api_key=${config.api_key}&account_type=1&name=${qqnum}&level=${level}&registration=${registration}&expiration=${expiration}&desc=${dayRecord(desc)}`)
     if (post.code !== 1) {
       return `错误：添加用户失败。API返回：${post.msg || '未知错误'}`
