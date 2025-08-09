@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import { Context, Schema,Session } from 'koishi'
 import type { OneBot } from 'koishi-plugin-adapter-onebot'
 import path from 'path'
+import https from 'https'
 
 
 export const name = 'ysyunhei'
@@ -18,9 +19,10 @@ export const usage = `
 * \`desc\`:违规描述，用于记录违规行为。
 * \`bantime\`:禁言时长（可选）。当该项有值，机器人会给该账号设置所在的群里指定的禁言时长。
 ### 在云黑中查询账号
-\`yunhei.chk [qqnum]\`
+\`yunhei.chk [qqnum]\`（别名：\`yunhei.cx\`）
 
 当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有成员（包括管理员与群主）。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
+\n### 查看插件信息\n\`yunhei.about\`\n\n显示当前插件版本、贡献者列表，并检查云黑官网可用性。
 `
 
 //填入api key
@@ -99,6 +101,71 @@ function dayRecord(desc:string): string {
   const month = String(now.getMonth() + 1).padStart(2, '0'); // 月份补零（0 → "01"）
   const day = String(now.getDate()).padStart(2, '0'); // 日期补零（5 → "05"）
   return `${desc}（${year}-${month}-${day}）`; // 返回 YYYY-MM-DD
+}
+
+// 读取 package.json 的版本与贡献者
+async function readPackageMeta(): Promise<{ version: string; contributors: string[] }> {
+  try {
+    const pkgPath = path.resolve(__dirname, '../package.json')
+    const raw = await fs.readFile(pkgPath, 'utf-8')
+    const pkg = JSON.parse(raw)
+    const version: string = String(pkg.version || '未知')
+    const list: any[] = Array.isArray(pkg.contributors) ? pkg.contributors : []
+    const contributors = list
+      .map((c) => {
+        if (!c) return ''
+        if (typeof c === 'string') return c.split('<')[0].trim()
+        if (typeof c === 'object') return String(c.name ?? '').trim() || String(c).trim()
+        return String(c).trim()
+      })
+      .filter((s) => s)
+    return { version, contributors }
+  } catch {
+    return { version: '未知', contributors: [] }
+  }
+}
+
+// 检查官网可用性（优先 HEAD，若不支持则回退 GET）
+async function checkWebsiteStatus(url: string): Promise<{ ok: boolean; status?: number; error?: string }> {
+  function requestStatus(method: 'HEAD' | 'GET', url: string, timeout = 8000): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const req = https.request(url, { method }, (res) => {
+        const code = res.statusCode || 0
+        // 消耗并丢弃响应体，尽快结束连接
+        res.resume()
+        resolve(code)
+      })
+      req.on('error', reject)
+      req.setTimeout(timeout, () => {
+        req.destroy(new Error('timeout'))
+      })
+      req.end()
+    })
+  }
+  try {
+    let status = await requestStatus('HEAD', url)
+    if (status === 405 || status === 0) {
+      // 不支持 HEAD 或未知，回退 GET
+      status = await requestStatus('GET', url)
+    }
+    return { ok: status >= 200 && status < 300, status }
+  } catch (err) {
+    return { ok: false, error: sanitizeErrorMessage(err) }
+  }
+}
+
+// about 指令实现
+export async function about(ctx: Context): Promise<string> {
+  const meta = await readPackageMeta()
+  const status = await checkWebsiteStatus('https://yunhei.youshou.wiki')
+
+  const versionLine = `版本：v${meta.version}`
+  const contribLine = `贡献者：${meta.contributors.length ? meta.contributors.join('、') : '（无）'}`
+  const statusLine = status.ok
+    ? `云黑服务：✅ 正常 (HTTP 200)`
+    : `云黑服务：❌ 异常 (${status.status ? 'HTTP ' + status.status : status.error || '未知错误'})`
+
+  return [versionLine, contribLine, statusLine].join('\n')
 }
 
 //添加黑名单用户
@@ -314,5 +381,8 @@ export function apply(ctx: Context,config: Config) {
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
     .action(({ session }, qqnum, level, desc, bantime) => add(ctx, session, qqnum, level, desc, bantime, config))
   ctx.command('yunhei.chk [qqnum]')
+  .alias('yunhei.cx')
     .action(({ session }, qqnum) => check(ctx, session, qqnum, config))
+  ctx.command('yunhei.about')
+    .action(() => about(ctx))
 }

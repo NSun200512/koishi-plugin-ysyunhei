@@ -1,9 +1,10 @@
 {
   "name": "koishi-plugin-ysyunhei",
   "description": "通过OneBot实现对特定云端黑名单系统添加和查询人员的机器人插件。",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "contributors": [
-    "N. Sun <nsun200512@outlook.com>"
+    "N. Sun <nsun200512@outlook.com>",
+    "ZoruaFox <zorua@vip.qq.com>"
   ],
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
@@ -15,7 +16,7 @@
   "homepage": "https://yunhei.youshou.wiki",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NSun200512/koishi-plugin-ysyunhei.git"
+    "url": "git+https://github.com/TopRealm/koishi-plugin-ysyunhei.git"
   },
   "keywords": [
     "onebot",
