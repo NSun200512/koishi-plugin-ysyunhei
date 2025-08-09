@@ -103,6 +103,27 @@ function dayRecord(desc:string): string {
   return `${desc}（${year}-${month}-${day}）`; // 返回 YYYY-MM-DD
 }
 
+// 简单的每用户-每指令冷却（单位：毫秒）
+const COOLDOWN_MS = 30_000
+const lastInvoke = new Map<string, number>()
+function checkAndSetCooldown(meta: Session, cmd: string): string | null {
+  try {
+    const user = meta?.userId || 'unknown'
+    const key = `${user}:${cmd}`
+    const now = Date.now()
+    const last = lastInvoke.get(key) || 0
+    const diff = now - last
+    if (diff < COOLDOWN_MS) {
+      const remain = Math.ceil((COOLDOWN_MS - diff) / 1000)
+      return `操作过于频繁（${cmd}），请在${remain}秒后再试。`
+    }
+    lastInvoke.set(key, now)
+    return null
+  } catch {
+    return null
+  }
+}
+
 // 读取 package.json 的版本与贡献者
 async function readPackageMeta(): Promise<{ version: string; contributors: string[] }> {
   try {
@@ -159,13 +180,14 @@ export async function about(ctx: Context): Promise<string> {
   const meta = await readPackageMeta()
   const status = await checkWebsiteStatus('https://yunhei.youshou.wiki')
 
+  const intro = `Ysy cloud blacklist plugin for OICQ`
   const versionLine = `版本：v${meta.version}`
   const contribLine = `贡献者：${meta.contributors.length ? meta.contributors.join('、') : '（无）'}`
   const statusLine = status.ok
     ? `云黑服务：✅ 正常 (HTTP 200)`
     : `云黑服务：❌ 异常 (${status.status ? 'HTTP ' + status.status : status.error || '未知错误'})`
 
-  return [versionLine, contribLine, statusLine].join('\n')
+  return [intro, versionLine, contribLine, statusLine].join('\n')
 }
 
 //添加黑名单用户
@@ -379,10 +401,22 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
 
 export function apply(ctx: Context,config: Config) {
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
-    .action(({ session }, qqnum, level, desc, bantime) => add(ctx, session, qqnum, level, desc, bantime, config))
+    .action(({ session }, qqnum, level, desc, bantime) => {
+      const tip = checkAndSetCooldown(session, 'yunhei.add')
+      if (tip) return tip
+      return add(ctx, session, qqnum, level, desc, bantime, config)
+    })
   ctx.command('yunhei.chk [qqnum]')
   .alias('yunhei.cx')
-    .action(({ session }, qqnum) => check(ctx, session, qqnum, config))
+    .action(({ session }, qqnum) => {
+      const tip = checkAndSetCooldown(session, 'yunhei.chk')
+      if (tip) return tip
+      return check(ctx, session, qqnum, config)
+    })
   ctx.command('yunhei.about')
-    .action(() => about(ctx))
+    .action(({ session }) => {
+      const tip = checkAndSetCooldown(session, 'yunhei.about')
+      if (tip) return tip
+      return about(ctx)
+    })
 }
