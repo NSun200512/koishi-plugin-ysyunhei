@@ -23,7 +23,7 @@ export const usage = `
 
 当填写了\`qqnum\`时，机器人会查询该账号是否在云黑中，如果有则给出相应信息。如果没有给\`qqnum\`填写值，则会查询群内的所有成员（包括管理员与群主）。在执行后一种检查操作时，如果存在等级为“严重”的账号，机器人同样会将该账号从所在的群里踢出。
 \n### 查看插件信息\n\`yunhei.about\`\n\n显示当前插件版本、贡献者列表，并检查云黑官网可用性。
-\n### 趣味：精致睡眠\n\`yunhei.sleepwell [confirm]\`\n\n- 作用：在北京时间 22:00-02:00 期间，对自己执行 8 小时禁言。\n- 使用：在时间段内，直接输入 \`yunhei.sleepwell\` 会提示确认信息，输入 \`yunhei.sleepwell confirm\` 即执行。\n- 限制：仅群聊可用；非上述时间段调用将不会有任何输出；本指令有 30 秒冷却。
+\n### 趣味：精致睡眠\n\`yunhei.sleepwell [confirm]\`\n\n- 作用：在北京时间 22:00-02:00 期间，对自己执行 8 小时禁言。\n- 使用：在时间段内，直接输入 \`yunhei.sleepwell\` 会提示确认信息，输入 \`yunhei.sleepwell confirm\` 即执行。\n- 限制：仅群聊可用；非上述时间段调用将不会有任何输出。
 `
 
 //填入api key
@@ -131,6 +131,22 @@ function checkAndSetCooldown(meta: Session, cmd: string): string | null {
     return null
   } catch {
     return null
+  }
+}
+
+// 轻量防抖：仅用于 yunhei.sleepwell 的 confirm 分支，避免短时间重复执行禁言
+const SLEEPWELL_CONFIRM_DEBOUNCE_MS = 2000
+const lastSleepwellConfirm = new Map<string, number>()
+function hitSleepwellDebounce(session: Session): boolean {
+  try {
+    const key = `${session.guildId || 'pm'}:${session.userId}`
+    const now = Date.now()
+    const last = lastSleepwellConfirm.get(key) || 0
+    if (now - last < SLEEPWELL_CONFIRM_DEBOUNCE_MS) return true
+    lastSleepwellConfirm.set(key, now)
+    return false
+  } catch {
+    return false
   }
 }
 
@@ -447,15 +463,25 @@ export function apply(ctx: Context,config: Config) {
         // 不在时间段则完全不响应
         return
       }
-      // 命中时间段后再检查冷却
-      const tip = checkAndSetCooldown(session, 'yunhei.sleepwell')
-      if (tip) return tip
+      // 命中时间段后，先检查机器人自身是否为群管；若不是，则无法执行禁言
+      try {
+        const botInfo = await session.onebot.getGroupMemberInfo(session.guildId, session.selfId)
+        if (!botInfo || botInfo.role === 'member') {
+          return '对不起，做不到'
+        }
+      } catch {
+        return '对不起，做不到'
+      }
       const muteHours = Math.max(1, ((config.sleep_mute_hours ?? 8) | 0))
       const baseMsg = `本命令将会针对执行一个${muteHours}小时的禁言，正所谓精致睡眠。`
       if (!confirm) {
-  return `${baseMsg}\n\n当前已在精致睡眠时间段（${start}:00-${end}:00），如果确认，请输入以下命令。注意，此操作不可撤销！\n*yunhei.sleepwell confirm*`
+  return `${baseMsg}\n\n当前已在精致睡眠时间段（${start}:00-${end}:00），如果确认，请输入以下命令。注意，此操作不可撤销！\n*yunhei.sleepwell confirm`
       }
       if (String(confirm).toLowerCase() === 'confirm') {
+        // 轻量防抖：2 秒内重复 confirm 将被拒绝
+        if (hitSleepwellDebounce(session)) {
+          return '操作过于频繁，请稍后再试。'
+        }
         try {
           // 先判断是否为群管，若是，仅提示且不执行禁言
           try {
