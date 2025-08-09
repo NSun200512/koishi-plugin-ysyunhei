@@ -207,7 +207,6 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
   }
   //查询所有用户信息
   if (qqnum===undefined) {
-    meta.send(`正在检查群内所有人员……`)
     let group_members
     try {
       group_members = await meta.onebot.getGroupMemberList(meta.guildId)
@@ -215,8 +214,17 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
   return `错误：获取群成员列表失败。原因：${sanitizeErrorMessage(error, config)}`
     }
 
-    let detectnum:number=0,light:number=0,moderate:number=0,severe:number=0,severe_users:string[]=[], api_errors: string[] = []
+    const totalMembers = group_members.length
     const membersToCheck = group_members.filter(member => member.role === 'member');
+    const totalToCheck = membersToCheck.length
+    // 开始时输出群员数量及将要检查的人数
+    meta.send(`正在检查群内所有人员（共${totalMembers}人，将检查普通成员${totalToCheck}人）……`)
+
+    let detectnum:number=0,light:number=0,moderate:number=0,severe:number=0,severe_users:string[]=[], api_errors: string[] = []
+    // 进度统计与阈值（25%、50%、75%）
+    let processedCount = 0
+    const thresholds = [0.25, 0.5, 0.75]
+    let nextThresholdIndex = 0
 
     await processInBatches(membersToCheck, async (member: OneBot.GroupMemberInfo) => {
       try {
@@ -230,16 +238,16 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
           }
           return;
         }
-        //等级判定
+        // 等级判定
         if (!(res.data.length === 0)) {
-          detectnum+=1
-          if (res.data.level==`轻微`) {
-            light+=1
-          } else if (res.data.level==`中等`) {
-            moderate+=1
-          } else if (res.data.level==`严重`) {
-            severe+=1
-            //构建严重用户信息并尝试踢群
+          detectnum += 1
+          if (res.data.level == `轻微`) {
+            light += 1
+          } else if (res.data.level == `中等`) {
+            moderate += 1
+          } else if (res.data.level == `严重`) {
+            severe += 1
+            // 构建严重用户信息并尝试踢群
             severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${res.data.describe}\n登记人：${res.data.registration}\n上黑时间：${res.data.add_time}`)
             try {
               await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
@@ -252,8 +260,19 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
         if (!api_errors.length) { // 只记录第一条网络错误
           api_errors.push(sanitizeErrorMessage(error, config));
         }
+      } finally {
+        // 进度更新（放在 finally，确保无论成功或失败都统计进度）
+        if (totalToCheck > 0) {
+          processedCount += 1
+          const ratio = processedCount / totalToCheck
+          while (nextThresholdIndex < thresholds.length && ratio >= thresholds[nextThresholdIndex]) {
+            const percent = Math.round(thresholds[nextThresholdIndex] * 100)
+            meta.send(`进度：已完成${percent}%（${processedCount}/${totalToCheck}）`)
+            nextThresholdIndex += 1
+          }
+        }
       }
-    }, 20)
+    }, 10)
     //生成报告
     let report:string
     if (detectnum == 0) {
