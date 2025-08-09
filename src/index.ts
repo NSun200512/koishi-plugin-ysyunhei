@@ -248,10 +248,15 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
             severe += 1
             // 构建严重用户信息并尝试踢群
             severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${res.data.describe}\n登记人：${res.data.registration}\n上黑时间：${res.data.add_time}`)
-            try {
-              await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
-            } catch (error) {
-              severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${sanitizeErrorMessage(error, config)}`);
+            if (member.role && member.role !== 'member') {
+              // 群主或管理员，机器人通常无权操作
+              severe_users.push(`  - 该成员为群主/管理员，机器人无权进行踢出操作，请手动处理。`)
+            } else {
+              try {
+                await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
+              } catch (error) {
+                severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${sanitizeErrorMessage(error, config)}`);
+              }
             }
           }
         }
@@ -279,7 +284,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
     } else {
         report = `检测到${detectnum}名违规用户。其中等级轻微者${light}人，等级中等者${moderate}人，等级严重者${severe}人。`
         if (!(severe_users.length === 0)){
-          report += `\n严重用户列表及处理结果：\n${severe_users.join('\n')}\n列表中等级为“严重”的用户已尝试踢出群聊。`
+          report += `\n严重用户列表及处理结果：\n${severe_users.join('\n')}\n其中普通成员已尝试踢出；若为群主/管理员，请手动处理。`
         }
     }
     if (api_errors.length > 0) {
