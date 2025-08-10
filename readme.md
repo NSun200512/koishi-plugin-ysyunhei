@@ -81,4 +81,4 @@ $ npm install --save koishi-plugin-ysyunhei
 
 ## 许可
 
-MIT
+本项目以 MIT 协议发布。详见仓库根目录的 LICENSE 文件。

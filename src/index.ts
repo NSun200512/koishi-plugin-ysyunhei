@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import fs from 'fs/promises'
 import { Context, Schema,Session } from 'koishi'
 import type { OneBot } from 'koishi-plugin-adapter-onebot'
