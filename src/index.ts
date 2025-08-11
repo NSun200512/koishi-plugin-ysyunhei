@@ -362,8 +362,8 @@ export async function add(ctx: Context, meta: Session, qqnum: string, level: num
       measure = '永久' + measure
     } else if (level==3) {  //3级（严重）记录时长永久并踢群
       try {
-        await meta.onebot.setGroupKick(meta.guildId, qqnum, false)
-        measure = '踢出群并永久' + measure
+        await meta.onebot.setGroupKick(meta.guildId, qqnum, true)
+        measure = '踢出群并拒绝再次申请，永久' + measure
       } catch (error) {
   return `踢出用户失败，可能是权限不足或对方是群主/管理员。错误信息：${sanitizeErrorMessage(error, config)}`
       }
@@ -460,7 +460,7 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
               severe_users.push(`  - 该成员为群主/管理员，机器人无权进行踢出操作，请手动处理。`)
             } else {
               try {
-                await meta.onebot.setGroupKick(meta.guildId, member.user_id, false)
+                await meta.onebot.setGroupKick(meta.guildId, member.user_id, true)
               } catch (error) {
                 severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${sanitizeErrorMessage(error, config)}`);
               }
