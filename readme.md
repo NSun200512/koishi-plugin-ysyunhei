@@ -25,6 +25,7 @@ $ npm install --save koishi-plugin-ysyunhei
 - `sleep_start_hour`：精致睡眠开始时间（北京时间整点，0-23，默认 22）。
 - `sleep_end_hour`：精致睡眠结束时间（北京时间整点，0-23，默认 2）。
 - `sleep_mute_hours`：精致睡眠禁言时长（小时，1-24，默认 8）。
+- `render_as_image`：是否将主要文本输出渲染为图片消息（默认关闭）。开启后若系统安装了 `@koishijs/plugin-puppeteer`，插件会把 `yunhei.add` / `yunhei.chk`（单人查询）/ `yunhei.about` 的输出以卡片图片形式发送；若未安装或渲染失败，会自动回退为纯文本。
 
 机器人的禁言与踢群功能需要群内管理员及以上的权限。
 

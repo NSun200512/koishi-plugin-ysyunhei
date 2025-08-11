@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import fs from 'fs/promises'
-import { Context, Schema,Session } from 'koishi'
+import { Context, Schema, Session, segment } from 'koishi'
 import type { OneBot } from 'koishi-plugin-adapter-onebot'
 import path from 'path'
 import https from 'https'
@@ -38,6 +38,8 @@ export interface Config {
   sleep_end_hour?: number
   // 精致睡眠禁言时长（小时）
   sleep_mute_hours?: number
+  // 是否将主要文本输出渲染为图片（需要安装 @koishijs/plugin-canvas，无法使用时会自动回落为文本）
+  render_as_image?: boolean
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -46,6 +48,7 @@ export const Config: Schema<Config> = Schema.object({
   sleep_start_hour: Schema.number().min(0).max(23).default(22).description('精致睡眠开始时间（北京时间小时，0-23）。'),
   sleep_end_hour: Schema.number().min(0).max(23).default(2).description('精致睡眠结束时间（北京时间小时，0-23）。'),
   sleep_mute_hours: Schema.number().min(1).max(24).default(8).description('精致睡眠禁言时长（小时）。'),
+  render_as_image: Schema.boolean().default(false).description('将主要输出（如查询/添加结果、about）渲染为图片消息（需装 @koishijs/plugin-canvas）。'),
 })
 
 //并发控制函数
@@ -215,6 +218,60 @@ export async function about(ctx: Context): Promise<string> {
     : `云黑服务：❌ 异常 (${status.status ? 'HTTP ' + status.status : status.error || '未知错误'})`
 
   return [intro, versionLine, contribLine, statusLine].join('\n')
+}
+
+// 将纯文本渲染为图片卡片（若可用），否则回落为文本
+async function maybeRenderAsImage(
+  ctx: Context,
+  config: Config,
+  text: string,
+  options?: { title?: string }
+): Promise<any> {
+  try {
+    if (!config.render_as_image) return text
+    const canvas: any = (ctx as any).canvas
+    if (!canvas || typeof canvas.render !== 'function') return text
+    const title = options?.title ?? '云黑结果'
+    // 拆分为行，构造简单卡片（使用 h()，避免 .ts 中使用 JSX）
+    const lines = String(text ?? '').split('\n')
+    // 动态加载 @satorijs/element，未安装则回落
+    let h: any
+    try {
+      const mod: any = await import('@satorijs/element')
+      h = mod?.h
+    } catch {
+      return text
+    }
+    if (typeof h !== 'function') return text
+  const vnode = h(
+      'div',
+      {
+        style: {
+          width: 900,
+          padding: 32,
+          background: '#0f1218',
+          color: '#e8edf2',
+          fontSize: 28,
+          fontFamily: 'Microsoft YaHei, Segoe UI, Arial, sans-serif',
+          lineHeight: 1.6,
+        },
+      },
+      h('div', { style: { fontSize: 34, fontWeight: 700, marginBottom: 16 } }, title),
+      h('div', { style: { height: 2, background: '#2a3340', marginBottom: 16 } }),
+      ...lines.map((ln, i) =>
+        h(
+          'div',
+          { key: String(i), style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
+          ln || ' '
+        )
+      ),
+      h('div', { style: { marginTop: 16, color: '#7b8794', fontSize: 22 } }, '由 koishi-plugin-ysyunhei 生成')
+    )
+    const buf: Buffer = await canvas.render(vnode)
+  return segment.image(buf as any, 'image/png')
+  } catch {
+    return text
+  }
 }
 
 //添加黑名单用户
@@ -428,23 +485,28 @@ export async function check(ctx: Context, meta: Session, qqnum: string, config: 
 
 export function apply(ctx: Context,config: Config) {
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
-    .action(({ session }, qqnum, level, desc, bantime) => {
+    .action(async ({ session }, qqnum, level, desc, bantime) => {
       const tip = checkAndSetCooldown(session, 'yunhei.add')
       if (tip) return tip
-      return add(ctx, session, qqnum, level, desc, bantime, config)
+      const res = await add(ctx, session, qqnum, level, desc, bantime, config)
+      return maybeRenderAsImage(ctx, config, res, { title: '云黑添加结果' })
     })
   ctx.command('yunhei.chk [qqnum]')
   .alias('yunhei.cx')
-    .action(({ session }, qqnum) => {
+    .action(async ({ session }, qqnum) => {
       const tip = checkAndSetCooldown(session, 'yunhei.chk')
       if (tip) return tip
-      return check(ctx, session, qqnum, config)
+      const res = await check(ctx, session, qqnum, config)
+      // 当检查整个群时，函数内部会主动分批发送并返回 void，此时不做图片渲染
+      if (res == null) return
+      return maybeRenderAsImage(ctx, config, res, { title: '云黑查询结果' })
     })
   ctx.command('yunhei.about')
-    .action(({ session }) => {
+    .action(async ({ session }) => {
       const tip = checkAndSetCooldown(session, 'yunhei.about')
       if (tip) return tip
-      return about(ctx)
+      const res = await about(ctx)
+      return maybeRenderAsImage(ctx, config, res, { title: '关于本插件' })
     })
 
   ctx.command('yunhei.sleepwell [confirm]')
