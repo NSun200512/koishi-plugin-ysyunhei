@@ -38,7 +38,7 @@ export interface Config {
   sleep_end_hour?: number
   // 精致睡眠禁言时长（小时）
   sleep_mute_hours?: number
-  // 是否将主要文本输出渲染为图片（需要安装 @koishijs/plugin-canvas，无法使用时会自动回落为文本）
+  // 是否将主要文本输出渲染为图片（推荐安装 @koishijs/plugin-puppeteer；无法使用时会自动回落为文本）
   render_as_image?: boolean
 }
 
@@ -48,7 +48,7 @@ export const Config: Schema<Config> = Schema.object({
   sleep_start_hour: Schema.number().min(0).max(23).default(22).description('精致睡眠开始时间（北京时间小时，0-23）。'),
   sleep_end_hour: Schema.number().min(0).max(23).default(2).description('精致睡眠结束时间（北京时间小时，0-23）。'),
   sleep_mute_hours: Schema.number().min(1).max(24).default(8).description('精致睡眠禁言时长（小时）。'),
-  render_as_image: Schema.boolean().default(false).description('将主要输出（如查询/添加结果、about）渲染为图片消息（需装 @koishijs/plugin-canvas）。'),
+  render_as_image: Schema.boolean().default(false).description('将主要输出（如查询/添加结果、about）渲染为图片消息（推荐装 @koishijs/plugin-puppeteer）。'),
 })
 
 //并发控制函数
@@ -229,8 +229,15 @@ async function maybeRenderAsImage(
 ): Promise<any> {
   try {
     if (!config.render_as_image) return text
+    // 优先使用 Puppeteer 的渲染服务；若不可用，则回退到老的 canvas.render
+    const puppeteer: any = (ctx as any).puppeteer
     const canvas: any = (ctx as any).canvas
-    if (!canvas || typeof canvas.render !== 'function') return text
+    const renderer: any = (puppeteer && typeof puppeteer.render === 'function')
+      ? puppeteer.render.bind(puppeteer)
+      : (canvas && typeof canvas.render === 'function')
+        ? canvas.render.bind(canvas)
+        : null
+    if (!renderer) return text
     const title = options?.title ?? '云黑结果'
     // 拆分为行，构造简单卡片（使用 h()，避免 .ts 中使用 JSX）
     const lines = String(text ?? '').split('\n')
@@ -267,7 +274,7 @@ async function maybeRenderAsImage(
       ),
       h('div', { style: { marginTop: 16, color: '#7b8794', fontSize: 22 } }, '由 koishi-plugin-ysyunhei 生成')
     )
-    const buf: Buffer = await canvas.render(vnode)
+  const buf: Buffer = await renderer(vnode)
   return segment.image(buf as any, 'image/png')
   } catch {
     return text
