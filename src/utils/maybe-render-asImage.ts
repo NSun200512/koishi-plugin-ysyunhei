@@ -2,6 +2,7 @@ import { h } from 'koishi';
 
 import xh from './h/h';
 import puppeteerUtile from './puppeteer/puppeteer';
+import { getLogger } from './logger'
 
 import type { Context } from 'koishi';
 import type Config from '../config';
@@ -20,9 +21,10 @@ export default async function maybeRenderAsImage(
   options?: { title?: string }
 ): Promise<any> {
   try {
-    if (!config.render_as_image) return text
+    const logger = getLogger(ctx, config)
+    if (!config.render_as_image) { logger.debug(1, '[render] disabled by config'); return text }
   // 未配置浏览器路径时跳过渲染，回退为文本
-  if (!config.browser_path) return text
+  if (!config.browser_path) { logger.debug(1, '[render] skip: missing browser_path'); return text }
     const title = options?.title ?? '云黑结果'
     // 拆分为行，构造简单卡片（使用 h()，避免 .ts 中使用 JSX）
     const lines = String(text ?? '').split('\n')
@@ -69,14 +71,14 @@ export default async function maybeRenderAsImage(
       ),
       xh('div', { style: { marginTop: '16px', color: '#7b8794', fontSize: '22px' } }, '由 koishi-plugin-ysyunhei 生成')
     )
-  const buf = await puppeteerUtile(config, vnode)
+  const buf = await puppeteerUtile(ctx, config, vnode)
     if (!buf) return text
     return h('div',
       h.image('base64://' + buf.toString('base64')),
       url
     )
   } catch (e) {
-  try { (ctx as any).logger('ysyunhei').error(e) } catch {}
+  try { (ctx as any).logger('ysyunhei').error('[render] failed:', e) } catch {}
     return text
   }
 }

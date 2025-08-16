@@ -23,4 +23,6 @@ export default interface Config {
   theme_light_color?: string
   // 深色主题背景色
   theme_dark_color?: string
+  // 调试日志级别：0 关闭，1 基本，2 详细，3 最详细
+  debug_level?: number
 }

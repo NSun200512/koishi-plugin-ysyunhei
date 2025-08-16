@@ -57,8 +57,10 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export function apply(ctx: Context, config: Config) {
+  const logger = (ctx as any).logger?.('ysyunhei')
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
     .action(async ({ session }, qqnum, level, desc, bantime) => {
+      try { logger?.debug?.('[cmd] yunhei.add', { userId: session?.userId, guildId: session?.guildId, qqnum, level, bantime }) } catch {}
       const tip = checkAndSetCooldown(session, 'yunhei.add')
       if (tip) return tip
       const res = await add(ctx, session, qqnum, level, desc, bantime, config)
@@ -67,6 +69,7 @@ export function apply(ctx: Context, config: Config) {
   ctx.command('yunhei.chk [qqnum]')
     .alias('yunhei.cx')
     .action(async ({ session }, qqnum) => {
+      try { logger?.debug?.('[cmd] yunhei.chk', { userId: session?.userId, guildId: session?.guildId, qqnum }) } catch {}
       const tip = checkAndSetCooldown(session, 'yunhei.chk')
       if (tip) return tip
       const res = await check(ctx, session, qqnum, config)
@@ -76,6 +79,7 @@ export function apply(ctx: Context, config: Config) {
     })
   ctx.command('yunhei.about')
     .action(async ({ session }) => {
+      try { logger?.debug?.('[cmd] yunhei.about', { userId: session?.userId, guildId: session?.guildId }) } catch {}
       const tip = checkAndSetCooldown(session, 'yunhei.about')
       if (tip) return tip
       const res = await about()
@@ -84,6 +88,7 @@ export function apply(ctx: Context, config: Config) {
 
   ctx.command('yunhei.sleepwell [confirm]')
     .action(async ({ session }, confirm) => {
+  try { logger?.debug?.('[cmd] yunhei.sleepwell', { userId: session?.userId, guildId: session?.guildId, confirm }) } catch {}
       // 仅群聊可用；若不是群聊则静默
       if (!session.guildId) return
       // 获取北京时间（UTC+8）
