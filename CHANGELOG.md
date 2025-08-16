@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1] - 2025-08-16
+
+### Changes
+
+- 增加CHANGELOG.md文件，记录版本更新日志。
+
+
 ## [2.0.0] - 2025-08-16
 
 ### Added
@@ -16,7 +23,7 @@
 - 优化 getStrangerInfo 失败时昵称回退逻辑，保证输出友好。
 - README 与 usage 文档同步，明确各配置项用途与兼容性。
 
-### Fixed
+### Fixes
 
 - 修复 browser_path 配置项必填导致的易用性问题。
 - 修正图片渲染样式 fontWeight 为 '700'，视觉更统一。
