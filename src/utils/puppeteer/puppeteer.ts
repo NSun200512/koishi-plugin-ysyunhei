@@ -1,6 +1,5 @@
 import fs from 'fs/promises'
 import path from 'path'
-import os from 'os'
 
 import puppeteer from 'puppeteer-core';
 import type { Context } from 'koishi'
@@ -43,17 +42,15 @@ const init = async (executablePath: string) => {
 }
 
 
-const openHtmlFile = async (html: string, targetPath: string) : Promise<boolean> => {
+const composeHtml = async (html: string): Promise<string | undefined> => {
   try {
     let tpl: string | undefined;
     try {
       tpl = await fs.readFile(HTML_TEMPLATE_FILE_PATH, 'utf-8');
     } catch {}
-    const NEWHTMLDATA = (tpl ?? HTML_TEMPLATE).replace(/__CONTENT__/g, html);
-    await fs.writeFile(targetPath, NEWHTMLDATA, 'utf-8');
-    return true;
-  } catch (error) {
-    return false;
+    return (tpl ?? HTML_TEMPLATE).replace(/__CONTENT__/g, html);
+  } catch {
+    return undefined;
   }
 }
 
@@ -64,19 +61,14 @@ export default async function puppeteerUtile(ctx: Context, config: Config, html:
   const logger = getLogger(ctx, config)
   logger.info('[puppeteer] launching', { path: config.browser_path })
   await init(config.browser_path);
-
-  // 为并发渲染生成唯一的临时 html 文件，避免相互覆盖
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ysyunhei-'))
-  const targetPath = path.join(tmpDir, 'target.html')
-
-  const result = await openHtmlFile(html, targetPath);
-  logger.debug('[puppeteer] temp html written', { targetPath, ok: !!result })
-  if (!result) return void 0;
+  const finalHtml = await composeHtml(html)
+  if (!finalHtml) return void 0
+  logger.debug('[puppeteer] html composed')
 
   // 打开一个新的页面
   const page = await browser.newPage();
-  await page.goto('file://' + targetPath, { waitUntil: 'networkidle0' });
-  logger.debug('[puppeteer] page goto done')
+  await page.setContent(finalHtml, { waitUntil: 'domcontentloaded' })
+  logger.debug('[puppeteer] page content set')
   // 截图并获取 Base64 编码
   const fileElement = await page.waitForSelector('#app');
   logger.debug('[puppeteer] #app selected')
@@ -87,7 +79,5 @@ export default async function puppeteerUtile(ctx: Context, config: Config, html:
   // 关闭浏览器
   await browser.close();
   logger.info('[puppeteer] browser closed')
-  // 清理临时文件
-  try { await fs.rm(tmpDir, { recursive: true, force: true }) } catch {}
   return screenshotBase64;
 }
