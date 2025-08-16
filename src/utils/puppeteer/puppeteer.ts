@@ -62,7 +62,7 @@ const openHtmlFile = async (html: string, targetPath: string) : Promise<boolean>
 export default async function puppeteerUtile(ctx: Context, config: Config, html: string = ''): Promise<Buffer<ArrayBuffer> | string> {
   // 必须每次调用都重新生成新的浏览器对象，否则会报错-硬币
   const logger = getLogger(ctx, config)
-  logger.debug(1, '[puppeteer] launch start, path=', config.browser_path)
+  logger.info('[puppeteer] launching', { path: config.browser_path })
   await init(config.browser_path);
 
   // 为并发渲染生成唯一的临时 html 文件，避免相互覆盖
@@ -70,23 +70,23 @@ export default async function puppeteerUtile(ctx: Context, config: Config, html:
   const targetPath = path.join(tmpDir, 'target.html')
 
   const result = await openHtmlFile(html, targetPath);
-  logger.debug(2, '[puppeteer] write html =>', targetPath, 'ok=', !!result)
+  logger.debug('[puppeteer] temp html written', { targetPath, ok: !!result })
   if (!result) return void 0;
 
   // 打开一个新的页面
   const page = await browser.newPage();
   await page.goto('file://' + targetPath, { waitUntil: 'networkidle0' });
-  logger.debug(2, '[puppeteer] page goto done')
+  logger.debug('[puppeteer] page goto done')
   // 截图并获取 Base64 编码
   const fileElement = await page.waitForSelector('#app');
-  logger.debug(3, '[puppeteer] #app selected')
+  logger.debug('[puppeteer] #app selected')
   const screenshotBuffer = await fileElement.screenshot();
-  logger.debug(2, '[puppeteer] screenshot done, bytes=', (screenshotBuffer as any)?.length)
+  logger.info('[puppeteer] screenshot done', { bytes: (screenshotBuffer as any)?.length })
   const screenshotBase64 = Buffer.from(screenshotBuffer);
 
   // 关闭浏览器
   await browser.close();
-  logger.debug(1, '[puppeteer] browser closed')
+  logger.info('[puppeteer] browser closed')
   // 清理临时文件
   try { await fs.rm(tmpDir, { recursive: true, force: true }) } catch {}
   return screenshotBase64;

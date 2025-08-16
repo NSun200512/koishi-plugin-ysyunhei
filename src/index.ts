@@ -4,6 +4,7 @@ import { Context, Schema, Session, h, segment } from 'koishi'
 import checkAndSetCooldown from './utils/check-and-set-cooldown'
 import hitSleepwellDebounce from './utils/hit-sleepwell-debounce'
 import maybeRenderAsImage from './utils/maybe-render-asImage'
+import { getLogger } from './utils/logger'
 
 // 实现的指令导入
 import about from './command/ys-about'
@@ -49,6 +50,14 @@ export const Config: Schema<Config> = Schema.object({
     Schema.const('canvas').description('仅使用 Canvas（不可用则回退为文本）'),
   ]).default('auto').description('图片渲染服务偏好。'),
   browser_path: Schema.string().description('浏览器可执行文件路径（仅图片渲染时使用）。未填写则不进行图片渲染。示例：Windows: C\\\Program Files\\\Google\\\Chrome\\\Application\\\chrome.exe 或 C:\\\\Program Files\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe；macOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome；Linux: /usr/bin/google-chrome 或 /usr/bin/chromium').default(''),
+  // 新增：日志级别阈值（优先于 debug_level）
+  log_level: Schema.union([
+    Schema.const('debug').description('调试 (最详细)'),
+    Schema.const('info').description('信息'),
+    Schema.const('warn').description('警告'),
+    Schema.const('error').description('错误'),
+    Schema.const('fatal').description('致命错误'),
+  ]).default('info').description('日志级别阈值：低于该级别的日志将被抑制。'),
   // 新版主题配置（非私密配置）
   theme_start_hour: Schema.number().min(0).max(23).default(8).description('主题浅色时段开始小时（北京时间 0-23，可跨零点）。'),
   theme_end_hour: Schema.number().min(0).max(23).default(20).description('主题浅色时段结束小时（北京时间 0-23，可跨零点）。'),
@@ -57,10 +66,10 @@ export const Config: Schema<Config> = Schema.object({
 })
 
 export function apply(ctx: Context, config: Config) {
-  const logger = (ctx as any).logger?.('ysyunhei')
+  const logger = getLogger(ctx, config)
   ctx.command('yunhei.add <qqnum> <level:number> <desc> [bantime]')
     .action(async ({ session }, qqnum, level, desc, bantime) => {
-      try { logger?.debug?.('[cmd] yunhei.add', { userId: session?.userId, guildId: session?.guildId, qqnum, level, bantime }) } catch {}
+      logger.debug('[cmd] yunhei.add', { userId: session?.userId, guildId: session?.guildId, qqnum, level, bantime })
       const tip = checkAndSetCooldown(session, 'yunhei.add')
       if (tip) return tip
       const res = await add(ctx, session, qqnum, level, desc, bantime, config)
@@ -69,7 +78,7 @@ export function apply(ctx: Context, config: Config) {
   ctx.command('yunhei.chk [qqnum]')
     .alias('yunhei.cx')
     .action(async ({ session }, qqnum) => {
-      try { logger?.debug?.('[cmd] yunhei.chk', { userId: session?.userId, guildId: session?.guildId, qqnum }) } catch {}
+      logger.debug('[cmd] yunhei.chk', { userId: session?.userId, guildId: session?.guildId, qqnum })
       const tip = checkAndSetCooldown(session, 'yunhei.chk')
       if (tip) return tip
       const res = await check(ctx, session, qqnum, config)
@@ -79,7 +88,7 @@ export function apply(ctx: Context, config: Config) {
     })
   ctx.command('yunhei.about')
     .action(async ({ session }) => {
-      try { logger?.debug?.('[cmd] yunhei.about', { userId: session?.userId, guildId: session?.guildId }) } catch {}
+      logger.debug('[cmd] yunhei.about', { userId: session?.userId, guildId: session?.guildId })
       const tip = checkAndSetCooldown(session, 'yunhei.about')
       if (tip) return tip
       const res = await about()
@@ -88,7 +97,7 @@ export function apply(ctx: Context, config: Config) {
 
   ctx.command('yunhei.sleepwell [confirm]')
     .action(async ({ session }, confirm) => {
-  try { logger?.debug?.('[cmd] yunhei.sleepwell', { userId: session?.userId, guildId: session?.guildId, confirm }) } catch {}
+  logger.debug('[cmd] yunhei.sleepwell', { userId: session?.userId, guildId: session?.guildId, confirm })
       // 仅群聊可用；若不是群聊则静默
       if (!session.guildId) return
       // 获取北京时间（UTC+8）

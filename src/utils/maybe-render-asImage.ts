@@ -22,9 +22,9 @@ export default async function maybeRenderAsImage(
 ): Promise<any> {
   try {
     const logger = getLogger(ctx, config)
-    if (!config.render_as_image) { logger.debug(1, '[render] disabled by config'); return text }
+  if (!config.render_as_image) { logger.info('[render] disabled by config'); return text }
   // 未配置浏览器路径时跳过渲染，回退为文本
-  if (!config.browser_path) { logger.debug(1, '[render] skip: missing browser_path'); return text }
+  if (!config.browser_path) { logger.warn('[render] skip: missing browser_path'); return text }
     const title = options?.title ?? '云黑结果'
     // 拆分为行，构造简单卡片（使用 h()，避免 .ts 中使用 JSX）
     const lines = String(text ?? '').split('\n')
