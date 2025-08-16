@@ -32,6 +32,6 @@
     "puppeteer-core": "24.16.2"
   },
   "scripts": {
-    "postbuild": "pwsh -NoProfile -Command \"$src='src/utils/puppeteer/template.html'; $dst='lib/utils/puppeteer/'; if (Test-Path $src) { New-Item -ItemType Directory -Force -Path $dst | Out-Null; Copy-Item $src -Destination $dst -Force }\""
+  "postbuild": "pwsh -NoProfile -Command \"$src='src/utils/puppeteer/template.html'; $dst='lib/utils/puppeteer/'; if (Test-Path $src) { New-Item -ItemType Directory -Force -Path $dst | Out-Null; Copy-Item $src -Destination $dst -Force }; $lib='lib'; $keep=(Join-Path $lib 'index.d.ts'); Get-ChildItem -Path $lib -Recurse -Filter '*.d.ts' | Where-Object { $_.FullName -ne $keep } | Remove-Item -Force -ErrorAction SilentlyContinue; Get-ChildItem -Path $lib -Recurse -Filter '*.ts' | Remove-Item -Force -ErrorAction SilentlyContinue\""
   }
 }

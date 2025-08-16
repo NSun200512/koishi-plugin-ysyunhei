@@ -18,22 +18,21 @@ export default async function check(ctx: Context, meta: Session, qqnum: string, 
   if (meta.guildId === undefined) {
     return '错误：请在群组内使用命令。'
   }
-  //检查机器人权限
-  try {
-    let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
-    if (bot.role == 'member') {
-      return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
-    }
-  } catch (error) {
-  return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${sanitizeErrorMessage(error, config)}`
-  }
-
-  //检查使用者是否为管理
-  if (!config.admin_qqs || !(meta.userId in config.admin_qqs)) {
-    return '错误：您没有使用该命令的权限。'
-  }
-  //查询所有用户信息
+  const isAdmin = !!(config.admin_qqs && (meta.userId in config.admin_qqs))
+  //查询所有用户信息（仅管理员可用，且需要机器人权限）
   if (qqnum===undefined) {
+    if (!isAdmin) {
+      return '错误：您没有使用该命令的权限。'
+    }
+    //检查机器人权限（仅群内全量检查时需要）
+    try {
+      let bot: OneBot.GroupMemberInfo = await meta.onebot.getGroupMemberInfo(meta.guildId, meta.selfId)
+      if (bot.role == 'member') {
+        return '错误：本功能需要机器人为群组管理员，请联系群主设置。'
+      }
+    } catch (error) {
+      return `错误：检查机器人权限失败，可能是机器人未加入该群或API出现问题。原因：${sanitizeErrorMessage(error, config)}`
+    }
     let group_members
     try {
       group_members = await meta.onebot.getGroupMemberList(meta.guildId)
