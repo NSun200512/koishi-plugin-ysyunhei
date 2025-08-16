@@ -10,13 +10,14 @@
 
 ## 安装与配置
 
-你可以使用 yarn 或 npm 手动安装本插件：
+
+推荐使用 yarn 安装本插件：
 
 ```bash
-$ yarn add koishi-plugin-ysyunhei
-# 或者
-$ npm install --save koishi-plugin-ysyunhei
+yarn add koishi-plugin-ysyunhei
 ```
+
+> 本项目已全面采用 yarn 作为包管理器，不再推荐使用 npm。
 
 配置项：
 
