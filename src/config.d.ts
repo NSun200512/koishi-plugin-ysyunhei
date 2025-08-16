@@ -15,8 +15,12 @@ export default interface Config {
   render_service_preference?: 'auto' | 'puppeteer' | 'canvas'
   // 浏览器路径配置
   browser_path?: string
-  // 主题自动切换时间
-  theme_date?: string
-
-  theme_color?: string
+  // 主题自动切换（浅色主题）开始小时（本地时间，0-23）
+  theme_start_hour?: number
+  // 主题自动切换（浅色主题）结束小时（本地时间，0-23）
+  theme_end_hour?: number
+  // 浅色主题背景色
+  theme_light_color?: string
+  // 深色主题背景色
+  theme_dark_color?: string
 }

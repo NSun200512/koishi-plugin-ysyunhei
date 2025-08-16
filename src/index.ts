@@ -49,8 +49,11 @@ export const Config: Schema<Config> = Schema.object({
     Schema.const('canvas').description('仅使用 Canvas（不可用则回退为文本）'),
   ]).default('auto').description('图片渲染服务偏好。'),
   browser_path: Schema.string().role('secret').description('浏览器路径（仅 Puppeteer 渲染时有效）。').default(''),
-  theme_date: Schema.string().role('secret').default('8/20').description('主题自动切换时间。在这个时间段为白色主题，使用/分割时间段。'),
-  theme_color: Schema.string().role('secret').default('#e8edf2/#252525').description('主题颜色。'),
+  // 新版主题配置（非私密配置）
+  theme_start_hour: Schema.number().min(0).max(23).default(8).description('主题浅色时段开始小时（北京时间 0-23，可跨零点）。'),
+  theme_end_hour: Schema.number().min(0).max(23).default(20).description('主题浅色时段结束小时（北京时间 0-23，可跨零点）。'),
+  theme_light_color: Schema.string().role('color').default('#e8edf2').description('浅色主题背景颜色。'),
+  theme_dark_color: Schema.string().role('color').default('#252525').description('深色主题背景颜色。'),
 })
 
 export function apply(ctx: Context, config: Config) {
@@ -98,7 +101,8 @@ export function apply(ctx: Context, config: Config) {
       }
       // 命中时间段后，先检查机器人自身是否为群管；若不是，则无法执行禁言
       try {
-        const botInfo = await session.onebot.getGroupMemberInfo(session.guildId, session.selfId)
+        const onebot = (session as any).onebot
+        const botInfo = await onebot.getGroupMemberInfo(session.guildId, session.selfId)
         if (!botInfo || botInfo.role === 'member') {
           return '对不起，做不到'
         }
@@ -118,14 +122,16 @@ export function apply(ctx: Context, config: Config) {
         try {
           // 先判断是否为群管，若是，仅提示且不执行禁言
           try {
-            const info = await session.onebot.getGroupMemberInfo(session.guildId, session.userId)
+            const onebot = (session as any).onebot
+            const info = await onebot.getGroupMemberInfo(session.guildId, session.userId)
             if (info?.role && info.role !== 'member') {
               return '你已经是一个成熟的群管了，要学会以身作则按时休息！'
             }
           } catch { }
 
           const seconds = muteHours * 60 * 60
-          await session.onebot.setGroupBan(session.guildId, session.userId, seconds)
+          const onebot = (session as any).onebot
+          await onebot.setGroupBan(session.guildId, session.userId, seconds)
           return `${muteHours}小时精致睡眠已到账，晚安~`
         } catch (e) {
           return '禁言失败，可能是机器人权限不足。'
