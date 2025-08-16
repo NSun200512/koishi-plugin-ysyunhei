@@ -11,56 +11,9 @@ const HTML_TEMPLATE_FILE_PATH = path.join(__dirname, 'template.html');
 
 let browser: Browser;
 
-async function findChromeExecutable(): Promise<string | undefined> {
-  const platform = os.platform()
-  const candidates: string[] = []
-  if (platform === 'win32') {
-    const programFiles = process.env['PROGRAMFILES'] || 'C:/Program Files'
-    const programFilesx86 = process.env['PROGRAMFILES(X86)'] || 'C:/Program Files (x86)'
-    const localAppData = process.env['LOCALAPPDATA'] || 'C:/Users/' + os.userInfo().username + '/AppData/Local'
-    candidates.push(
-      path.join(programFiles, 'Google/Chrome/Application/chrome.exe'),
-      path.join(programFilesx86, 'Google/Chrome/Application/chrome.exe'),
-      path.join(programFiles, 'Microsoft/Edge/Application/msedge.exe'),
-      path.join(programFilesx86, 'Microsoft/Edge/Application/msedge.exe'),
-      path.join(localAppData, 'Google/Chrome/Application/chrome.exe'),
-      path.join(localAppData, 'Chromium/Application/chrome.exe'),
-      'C:/Program Files/Google/Chrome/Application/chrome.exe',
-      'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-      'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-      'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
-    )
-  } else if (platform === 'darwin') {
-    candidates.push(
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      '/Applications/Chromium.app/Contents/MacOS/Chromium',
-      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'
-    )
-  } else {
-    // linux
-    candidates.push(
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/chromium',
-      '/snap/bin/chromium',
-      '/usr/bin/microsoft-edge',
-    )
-  }
-  for (const p of candidates) {
-    try {
-      const stat = await fs.stat(p)
-      if (stat.isFile()) return p
-    } catch {}
-  }
-  return undefined
-}
-
-const init = async (executablePath?: string) => {
-  const exe = executablePath && executablePath.trim() ? executablePath : await findChromeExecutable()
-  if (!exe) throw new Error('未找到可用的 Chrome/Chromium/Edge 浏览器，请在配置中指定 browser_path。')
+const init = async (executablePath: string) => {
   browser = await puppeteer.launch({
-      executablePath: exe,
+      executablePath: executablePath,
       headless: true,
   });
 }

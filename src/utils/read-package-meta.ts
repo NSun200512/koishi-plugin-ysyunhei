@@ -10,8 +10,21 @@ let cache: { version: string; contributors: string[] } | null = null
 export default async function readPackageMeta(): Promise<{ version: string; contributors: string[] }> {
   try {
     if (cache) return cache
-    const pkgPath = path.join(__dirname, '../../package.json')
-    const raw = await fs.readFile(pkgPath, 'utf-8')
+    // 兼容多种运行目录与打包结构，尝试多条候选路径
+    const candidates = [
+      path.join(__dirname, '../../package.json'),
+      path.join(__dirname, '../../../package.json'),
+      path.join(__dirname, '../package.json'),
+      path.join(process.cwd(), 'node_modules', 'koishi-plugin-ysyunhei', 'package.json'),
+    ]
+    let raw = ''
+    for (const p of candidates) {
+      try {
+        raw = await fs.readFile(p, 'utf-8')
+        if (raw) break
+      } catch {}
+    }
+    if (!raw) throw new Error('package.json not found')
     const pkg = JSON.parse(raw)
     const version: string = String(pkg.version || '未知')
     const list: any[] = Array.isArray(pkg.contributors) ? pkg.contributors : []

@@ -48,7 +48,7 @@ export const Config: Schema<Config> = Schema.object({
     Schema.const('puppeteer').description('仅使用 Puppeteer（不可用则回退为文本）'),
     Schema.const('canvas').description('仅使用 Canvas（不可用则回退为文本）'),
   ]).default('auto').description('图片渲染服务偏好。'),
-  browser_path: Schema.string().role('secret').description('浏览器路径（仅 Puppeteer 渲染时有效）。').default(''),
+  browser_path: Schema.string().description('浏览器可执行文件路径（仅图片渲染时使用）。未填写则不进行图片渲染。示例：Windows: C\\\Program Files\\\Google\\\Chrome\\\Application\\\chrome.exe 或 C:\\\\Program Files\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe；macOS: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome；Linux: /usr/bin/google-chrome 或 /usr/bin/chromium').default(''),
   // 新版主题配置（非私密配置）
   theme_start_hour: Schema.number().min(0).max(23).default(8).description('主题浅色时段开始小时（北京时间 0-23，可跨零点）。'),
   theme_end_hour: Schema.number().min(0).max(23).default(20).description('主题浅色时段结束小时（北京时间 0-23，可跨零点）。'),
