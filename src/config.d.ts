@@ -14,7 +14,7 @@ export default interface Config {
   // 图片渲染服务偏好：auto（默认，优先 puppeteer，失败回退 canvas）、puppeteer、canvas
   render_service_preference?: 'auto' | 'puppeteer' | 'canvas'
   // 浏览器路径配置
-  browser_path: string
+  browser_path?: string
   // 主题自动切换时间
   theme_date?: string
 

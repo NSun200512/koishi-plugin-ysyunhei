@@ -21,6 +21,8 @@ export default async function maybeRenderAsImage(
 ): Promise<any> {
   try {
     if (!config.render_as_image) return text
+  // 未配置浏览器路径时跳过渲染，回退为文本
+  if (!config.browser_path) return text
     const title = options?.title ?? '云黑结果'
     // 拆分为行，构造简单卡片（使用 h()，避免 .ts 中使用 JSX）
     const lines = String(text ?? '').split('\n')
@@ -52,7 +54,7 @@ export default async function maybeRenderAsImage(
           lineHeight: 1.6,
         },
       },
-      xh('div', { style: { fontSize: '34px', fontWeight: '700px', marginBottom: '16px' } }, title),
+  xh('div', { style: { fontSize: '34px', fontWeight: '700', marginBottom: '16px' } }, title),
       xh('div', { style: { height: '2px', background: '#2a3340', marginBottom: '16px' } }),
       ...li.map((ln, i) =>
         xh(

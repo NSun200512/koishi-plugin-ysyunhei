@@ -48,7 +48,7 @@ export const Config: Schema<Config> = Schema.object({
     Schema.const('puppeteer').description('仅使用 Puppeteer（不可用则回退为文本）'),
     Schema.const('canvas').description('仅使用 Canvas（不可用则回退为文本）'),
   ]).default('auto').description('图片渲染服务偏好。'),
-  browser_path: Schema.string().role('secret').description('浏览器路径（仅 Puppeteer 渲染时有效）。').required(),
+  browser_path: Schema.string().role('secret').description('浏览器路径（仅 Puppeteer 渲染时有效）。').default(''),
   theme_date: Schema.string().role('secret').default('8/20').description('主题自动切换时间。在这个时间段为白色主题，使用/分割时间段。'),
   theme_color: Schema.string().role('secret').default('#e8edf2/#252525').description('主题颜色。'),
 })

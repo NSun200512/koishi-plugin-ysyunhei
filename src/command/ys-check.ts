@@ -65,22 +65,23 @@ export default async function check(ctx: Context, meta: Session, qqnum: string, 
           return;
         }
         // 等级判定
-        if (!(res.data.length === 0)) {
+        const item = Array.isArray(res.data) ? (res.data[0] || null) : res.data
+        if (item) {
           detectnum += 1
-          if (res.data.level == `轻微`) {
+          if (item.level == `轻微`) {
             light += 1
-          } else if (res.data.level == `中等`) {
+          } else if (item.level == `中等`) {
             moderate += 1
-          } else if (res.data.level == `严重`) {
+          } else if (item.level == `严重`) {
             severe += 1
             // 构建严重用户信息并尝试踢群
-            severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${res.data.describe}\n登记人：${res.data.registration}\n上黑时间：${res.data.add_time}`)
+            severe_users.push(`${member.nickname}（${member.user_id}）\n违规原因：${item.describe}\n登记人：${item.registration}\n上黑时间：${item.add_time}`)
             if (member.role && member.role !== 'member') {
               // 群主或管理员，机器人通常无权操作
               severe_users.push(`  - 该成员为群主/管理员，机器人无权进行踢出操作，请手动处理。`)
             } else {
               try {
-                await meta.onebot.setGroupKick(meta.guildId, member.user_id, true)
+                await meta.onebot.setGroupKick(meta.guildId, Number(member.user_id), true)
               } catch (error) {
                 severe_users.push(`  - 踢出用户 ${member.nickname}（${member.user_id}）失败: ${sanitizeErrorMessage(error, config)}`);
               }
@@ -125,11 +126,17 @@ export default async function check(ctx: Context, meta: Session, qqnum: string, 
       if (blacklist_person.code !== 1) {
         return `错误：查询用户失败。API返回：${blacklist_person.msg || '未知错误'}`
       }
-      if (blacklist_person.data.length === 0) {
+      if (Array.isArray(blacklist_person.data) && blacklist_person.data.length === 0) {
         return `查询成功，该用户不在黑名单中。`
       } else {
-        let data=blacklist_person.data
-        let nickname:string = (await meta.onebot.getStrangerInfo(data.account_name)).nickname
+        const data = Array.isArray(blacklist_person.data) ? (blacklist_person.data[0] || null) : blacklist_person.data
+        if (!data) return `查询成功，该用户不在黑名单中。`
+        let nickname: string
+        try {
+          nickname = (await meta.onebot.getStrangerInfo(Number(data.account_name))).nickname
+        } catch {
+          nickname = String(data.account_name)
+        }
         let res:string=`账号类型：${data.platform}\n用户名：${nickname}\nQQ号：${data.account_name}\n违规原因：${data.describe}\n严重等级：${data.level}\n登记人：${data.registration}\n上黑时间：${data.add_time}\n过期时间：${data.expiration}\n查询云黑请见：https://yunhei.youshou.wiki`
         return res
       }

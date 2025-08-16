@@ -72,7 +72,7 @@ export default async function add(ctx: Context, meta: Session, qqnum: string, le
       measure = '永久' + measure
     } else if (level==3) {  //3级（严重）记录时长永久并踢群
       try {
-        await meta.onebot.setGroupKick(meta.guildId, qqnum, true)
+        await meta.onebot.setGroupKick(meta.guildId, Number(qqnum), true)
         measure = '踢出群并拒绝再次申请，永久' + measure
       } catch (error) {
   return `踢出用户失败，可能是权限不足或对方是群主/管理员。错误信息：${sanitizeErrorMessage(error, config)}`
@@ -81,7 +81,7 @@ export default async function add(ctx: Context, meta: Session, qqnum: string, le
     //禁言处理
     if (!(bantime == undefined)){
       try {
-        await meta.onebot.setGroupBan(meta.guildId, qqnum, time2Seconds(bantime))
+        await meta.onebot.setGroupBan(meta.guildId, Number(qqnum), time2Seconds(bantime))
         measure += `并禁言${bantime}`
       } catch (error) {
   return `禁言用户失败，可能是权限不足或对方是群主/管理员。错误信息：${sanitizeErrorMessage(error, config)}`
@@ -92,8 +92,16 @@ export default async function add(ctx: Context, meta: Session, qqnum: string, le
     if (finalCheck.code !== 1) {
         return `成功添加用户到云黑，但获取最终信息时出错。API返回：${finalCheck.msg || '未知错误'}`;
     }
-    let data = finalCheck.data
-    let nickname:string = (await meta.onebot.getStrangerInfo(data.account_name)).nickname
+    const data = Array.isArray(finalCheck.data) ? (finalCheck.data[0] || null) : finalCheck.data
+    if (!data) {
+      return `成功添加用户到云黑，但未获取到有效的最终信息。`
+    }
+    let nickname: string
+    try {
+      nickname = (await meta.onebot.getStrangerInfo(Number(data.account_name || qqnum))).nickname
+    } catch {
+      nickname = String(data.account_name || qqnum)
+    }
     return `已将${nickname}（${qqnum}）${measure}。\n违规原因：${data.describe}\n严重程度：${data.level}\n措施：${measure}\n登记人：${data.registration}\n上黑时间：${data.add_time}`
 
   } catch (error) {
